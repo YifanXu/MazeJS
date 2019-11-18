@@ -1,16 +1,18 @@
 const size = 900;
-const boardSize = 30;
+const boardSize = 110;
+var fogEnabled = true;
+var aiEnabled = false;
 
 const generateConstraints = {
     minPathLength: boardSize * 3,
     maxPathLength: boardSize * boardSize * 0.15,
     initalBranchChance: 0.3,
-    subsequentBranchChance: 0.2,
+    subsequentBranchChance: 0.4,
     branchDeathChance: 0,
 }
 
 const playParameters = {
-    visionRadius: 3,
+    visionRadius: 1,
     fogDecayInterval: 200,
     fogDecayAmount: boardSize * boardSize * 0.1
 }
@@ -207,7 +209,9 @@ class Maze {
 
     moveTo(x, y) {
         if(x < 0 || y < 0 || x >= boardSize || y >= boardSize || this.board[x][y] === 1 ) return false;
-        if(this.board[x][y] === 3) alert('You win!')
+        if(this.board[x][y] === 3) {
+            alert('You win!')
+        }
 
         // This is a valid move, clear the fogg
         for(let neighborX = x - playParameters.visionRadius; neighborX <= x + playParameters.visionRadius; neighborX++) 
@@ -247,7 +251,7 @@ $(document).ready(()=>{
         y: e.clientY - canvasOffsetY
     })
 
-    m.draw(ctx, true, playerPos);
+    m.draw(ctx, fogEnabled, playerPos);
 
     setInterval(() => {
         for(let i = 0; i < playParameters.fogDecayAmount; i++) {
@@ -257,14 +261,59 @@ $(document).ready(()=>{
                 m.fog[x][y] = true;
             }
         }
-        m.draw(ctx, true, playerPos);
+        m.draw(ctx, fogEnabled, playerPos);
     }, playParameters.fogDecayInterval)
+
+    var aiPathingStack = [];
+    var aiBlackList = [];
+    setInterval(() => {
+        if(!aiEnabled) return;
+        let possibleMoves = [
+            [playerPos.x - 1, playerPos.y],
+            [playerPos.x + 1, playerPos.y],
+            [playerPos.x, playerPos.y - 1],
+            [playerPos.x, playerPos.y + 1],
+        ];
+        let currentPosHash = playerPos.x * boardSize + playerPos.y;
+
+        let foundGoodMove = false;
+        for(let move of possibleMoves) {
+            let posHash = move[0] * boardSize + move[1];
+            if(aiPathingStack.includes(posHash) || aiBlackList.includes(posHash)) continue;
+            if (m.moveTo(move[0], move[1])) {
+                aiPathingStack.push(currentPosHash);
+                playerPos = {x: move[0], y:move[1]};
+                foundGoodMove = true;
+                m.draw(ctx, fogEnabled, playerPos);
+            }
+        }
+        if(!foundGoodMove) {
+            if(aiPathingStack.length === 0) {
+                //Give up
+                alert('ai gave up lol');
+                aiEnabled = false;
+            }
+            else {
+                // Backtrack
+                aiBlackList.push(currentPosHash);
+                let lastMoveHash = aiPathingStack.pop();
+                let lastMove = {
+                    x: Math.floor(lastMoveHash / boardSize),
+                    y: lastMoveHash % boardSize
+                }
+                if (m.moveTo(lastMove.x, lastMove.y)) {
+                    playerPos = lastMove;
+                    m.draw(ctx, fogEnabled, playerPos);
+                }
+            }
+        }
+    }, 1)
 })
 
 $(document).on('keydown', (event) => {
     //console.log(`${event.key}: ${event.which}`);
     let keyCode = event.keyCode ? event.keyCode : event.which;
-    if(keyCode >= 37 && keyCode <= 40) {
+    if(keyCode >= 37 && keyCode <= 40 && !aiEnabled) {
         //arrow keys that we actually care about
         let targetSq = {...playerPos};
         switch(keyCode) {
@@ -284,7 +333,16 @@ $(document).on('keydown', (event) => {
 
         if (m.moveTo(targetSq.x, targetSq.y)) {
             playerPos = targetSq;
-            m.draw(ctx, true, playerPos);
+            m.draw(ctx, fogEnabled, playerPos);
         }
+    }
+    else if(keyCode === 70) {
+        fogEnabled = !fogEnabled;
+        m.draw(ctx, fogEnabled, playerPos);
+    }
+    else if (keyCode === 65) {
+        aiEnabled = !aiEnabled;
+        aiPathingStack = [];
+        aiBlackList = [];
     }
 })
