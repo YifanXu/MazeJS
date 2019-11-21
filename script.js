@@ -1,11 +1,11 @@
 const size = 900;
-const boardSize = 110;
+const boardSize = 60;
 var fogEnabled = true;
 var aiEnabled = false;
 
 const generateConstraints = {
     minPathLength: boardSize * 3,
-    maxPathLength: boardSize * boardSize * 0.15,
+    maxPathLength: boardSize * boardSize * 0.1,
     initalBranchChance: 0.3,
     subsequentBranchChance: 0.4,
     branchDeathChance: 0,
@@ -14,8 +14,13 @@ const generateConstraints = {
 const playParameters = {
     visionRadius: 1,
     fogDecayInterval: 200,
-    fogDecayAmount: boardSize * boardSize * 0.1
+    fogDecayAmount: boardSize * boardSize * 0
 }
+
+var aiPathingStack = [];
+var aiBlackList = [];
+
+var runCount = 1;
 
 const coloring = [
     '#E8E8F8',
@@ -45,6 +50,7 @@ class Maze {
     constructor() {
         this.board = new Array(boardSize);
         this.fog = new Array(boardSize)
+        this.completed = false;
         for(let i = 0; i < boardSize; i++) {
             this.board[i] = new Array(boardSize).fill(1);
             this.fog[i] = new Array(boardSize).fill(true);
@@ -210,7 +216,7 @@ class Maze {
     moveTo(x, y) {
         if(x < 0 || y < 0 || x >= boardSize || y >= boardSize || this.board[x][y] === 1 ) return false;
         if(this.board[x][y] === 3) {
-            alert('You win!')
+            this.completed = true;
         }
 
         // This is a valid move, clear the fogg
@@ -228,11 +234,27 @@ class Maze {
 }
 
 let m = new Maze();
+let startTime = performance.now();
+let times = [];
 
 let playerPos = Object.assign({}, m.start);
 m.moveTo(playerPos.x, playerPos.y)
 
 let ctx;
+
+const finishMaze = () => {
+    const endTime = performance.now();
+    m = new Maze();
+    playerPos = Object.assign({}, m.start);
+    m.moveTo(playerPos.x, playerPos.y)
+    m.draw(ctx, fogEnabled, playerPos);
+    aiPathingStack = [];
+    aiBlackList = [];
+    
+    $("#recordTable").append(`<tr><td>${runCount}</td><td>${endTime - startTime}ms</td></tr>`)
+    startTime = performance.now();
+    runCount++;
+}
 
 $(document).ready(()=>{
     // Init Variables
@@ -264,8 +286,6 @@ $(document).ready(()=>{
         m.draw(ctx, fogEnabled, playerPos);
     }, playParameters.fogDecayInterval)
 
-    var aiPathingStack = [];
-    var aiBlackList = [];
     setInterval(() => {
         if(!aiEnabled) return;
         let possibleMoves = [
@@ -285,6 +305,10 @@ $(document).ready(()=>{
                 playerPos = {x: move[0], y:move[1]};
                 foundGoodMove = true;
                 m.draw(ctx, fogEnabled, playerPos);
+                if(m.completed) {
+                    finishMaze();
+                    return;
+                }
             }
         }
         if(!foundGoodMove) {
@@ -311,6 +335,7 @@ $(document).ready(()=>{
 })
 
 $(document).on('keydown', (event) => {
+
     //console.log(`${event.key}: ${event.which}`);
     let keyCode = event.keyCode ? event.keyCode : event.which;
     if(keyCode >= 37 && keyCode <= 40 && !aiEnabled) {
@@ -334,6 +359,7 @@ $(document).on('keydown', (event) => {
         if (m.moveTo(targetSq.x, targetSq.y)) {
             playerPos = targetSq;
             m.draw(ctx, fogEnabled, playerPos);
+            if(m.completed) finishMaze();
         }
     }
     else if(keyCode === 70) {
